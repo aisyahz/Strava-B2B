@@ -78,7 +78,7 @@ export function App() {
   });
 
   // UI state
-  const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
+  const [activeTab, setActiveTab] = useState<NavTab>('leaderboard');
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [selectedParticipant, setSelectedParticipant] = useState<Participant | null>(null);
