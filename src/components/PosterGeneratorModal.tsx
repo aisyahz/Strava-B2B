@@ -217,7 +217,7 @@ export const PosterGeneratorModal: React.FC<PosterGeneratorModalProps> = ({
                   <div>
                     <div className="text-[10px] font-black text-amber-400 uppercase">★ {selectedGender === 'Female' ? "WOMEN'S" : selectedGender === 'Male' ? "MEN'S" : 'GRAND PRIX'} #1 APEX ★</div>
                     <div className="text-base font-black text-white f1-font">{p1.name}</div>
-                    <div className="text-xs text-slate-400">{p1.department} • 🎁 Garmin 965 + Trophy</div>
+                    <div className="text-xs text-slate-400">{p1.department} • 🎁 Apple Watch 11 + Trophy</div>
                   </div>
                 </div>
 

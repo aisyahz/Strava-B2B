@@ -80,7 +80,6 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'leaderboard', label: 'Leaderboard', icon: Trophy, badge: 'LIVE' },
     { id: 'departments', label: 'Dept Battle', icon: Users },
     { id: 'hall-of-fame', label: 'Hall of Fame', icon: Award },
-    { id: 'timeline', label: 'Journey', icon: Compass },
     { id: 'gallery', label: 'Feed & Photos', icon: ImageIcon },
     { id: 'announcements', label: 'Alerts', icon: Bell, badge: 'NEW' },
   ];

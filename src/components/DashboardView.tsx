@@ -54,7 +54,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     soundFX.playRaceBeep();
     if (onNavigate) onNavigate(tab);
     else if (tab === 'leaderboard' && onViewAllLeaderboard) onViewAllLeaderboard();
-    else if (tab === 'timeline' && onViewTimeline) onViewTimeline();
   };
 
   const handleToggleRegister = (id: string) => {
@@ -275,66 +274,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </section>
 
       {/* ================================================================ */}
-      {/* 3. VISUAL CHALLENGE TIMELINE (F1 Grand Prix Track Progress)      */}
-      {/* ================================================================ */}
-      <section className="glass-panel rounded-3xl p-6 border border-white/10 shadow-xl">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">🏁</span>
-            <h3 className="text-sm sm:text-base font-black text-white uppercase tracking-wider f1-font">
-              CHAMPIONSHIP JOURNEY
-            </h3>
-          </div>
-          <button
-            onClick={() => handleNav('timeline')}
-            className="text-xs font-mono text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer font-bold"
-          >
-            <span>FULL ROADMAP</span>
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        {/* Visual Stage Nodes */}
-        <div className="grid grid-cols-6 gap-2 sm:gap-4 relative pt-2">
-          {/* Connector Line behind nodes */}
-          <div className="absolute top-1/2 left-4 right-4 h-1 bg-white/10 -translate-y-1/2 z-0 hidden sm:block" />
-
-          {monthStages.map((stage) => {
-            const isCompleted = stage.status === 'completed';
-            const isActive = stage.status === 'active';
-
-            return (
-              <div 
-                key={stage.key}
-                className={`relative z-10 rounded-2xl p-3 sm:p-4 text-center border transition flex flex-col items-center justify-center gap-1.5 ${
-                  isActive
-                    ? 'glass-panel-orange border-orange-500 shadow-[0_0_20px_rgba(255,87,34,0.4)] scale-105'
-                    : isCompleted
-                    ? 'glass-panel border-amber-400/50 bg-amber-400/5'
-                    : 'glass-panel border-white/5 opacity-60'
-                }`}
-              >
-                <div className="text-xl sm:text-2xl">{stage.icon}</div>
-                <div className={`font-mono text-xs sm:text-sm font-black ${isActive ? 'text-orange-400' : isCompleted ? 'text-amber-400' : 'text-slate-400'}`}>
-                  {stage.label}
-                </div>
-                <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-full ${
-                  isActive 
-                    ? 'bg-orange-500 text-black' 
-                    : isCompleted 
-                    ? 'bg-amber-400/20 text-amber-300' 
-                    : 'bg-white/5 text-slate-500'
-                }`}>
-                  {isActive ? 'ACTIVE' : isCompleted ? 'LOCKED' : 'STAGE'}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* ================================================================ */}
-      {/* 4. DUAL CATEGORY CHAMPIONS SPOTLIGHT (F1 Driver Cards)           */}
+      {/* 3. DUAL CATEGORY CHAMPIONS SPOTLIGHT (F1 Driver Cards)           */}
       {/* ================================================================ */}
       <section className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">

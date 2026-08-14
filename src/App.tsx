@@ -29,7 +29,6 @@ import { DashboardView } from './components/DashboardView';
 import { LeaderboardView } from './components/LeaderboardView';
 import { DepartmentBattleView } from './components/DepartmentBattleView';
 import { BadgesHallOfFameView } from './components/BadgesHallOfFameView';
-import { JourneyTimelineView } from './components/JourneyTimelineView';
 import { PhotoGalleryView } from './components/PhotoGalleryView';
 import { AnnouncementsView } from './components/AnnouncementsView';
 import { AdminCenter } from './components/AdminCenter';
@@ -203,7 +202,6 @@ export function App() {
               onSelectParticipant={handleOpenParticipant}
               onNavigate={handleSelectTab}
               onViewAllLeaderboard={() => handleSelectTab('leaderboard')}
-              onViewTimeline={() => handleSelectTab('timeline')}
             />
           )}
 
@@ -227,12 +225,6 @@ export function App() {
             <BadgesHallOfFameView
               participants={participants}
               onSelectParticipant={handleOpenParticipant}
-            />
-          )}
-
-          {activeTab === 'timeline' && (
-            <JourneyTimelineView
-              season={season}
             />
           )}
 
