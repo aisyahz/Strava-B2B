@@ -1,28 +1,27 @@
 import React, { useState } from 'react';
 import { 
   Trophy, 
-  Crown, 
   Flame, 
-  TrendingUp, 
   Zap, 
-  Award, 
+  Calendar, 
+  MapPin, 
+  Clock, 
   Users, 
-  Activity, 
-  ArrowRight, 
-  ChevronRight, 
+  CheckCircle2, 
   Sparkles, 
-  Star,
-  MapPin,
-  Calendar,
-  Compass,
-  Gift,
-  Medal
+  ArrowRight,
+  TrendingUp,
+  ChevronRight,
+  Award,
+  Crown,
+  Share2,
+  Gift
 } from 'lucide-react';
-import { Participant, SeasonConfig, Announcement, PhotoPost, ChallengeMonth, NavTab, ViewTab, Gender } from '../types';
-import { MONTHS, findMVP, getCategoryRankings } from '../utils/calculations';
-import { TOP_5_PRIZES, getPrizeForRank } from '../data/prizes';
-import { PrizeStructureModal } from './PrizeStructureModal';
-import { CountdownWidget } from './CountdownWidget';
+import confetti from 'canvas-confetti';
+import { Participant, SeasonConfig, Announcement, PhotoPost, ChallengeMonth, NavTab, Gender } from '../types';
+import { findMVP, getCategoryRankings } from '../utils/calculations';
+import { OFFICIAL_EVENTS, OfficialEvent } from '../data/events';
+import { TOP_5_PRIZES } from '../data/prizes';
 import { soundFX } from '../utils/audio';
 
 interface DashboardViewProps {
@@ -34,6 +33,7 @@ interface DashboardViewProps {
   onNavigate?: (tab: NavTab) => void;
   onViewAllLeaderboard?: () => void;
   onViewTimeline?: () => void;
+  onOpenPosterExport?: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -45,609 +45,644 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigate,
   onViewAllLeaderboard,
   onViewTimeline,
+  onOpenPosterExport,
 }) => {
-  const [podiumMonth, setPodiumMonth] = useState<ChallengeMonth | 'overall'>('overall');
-  const [podiumCategory, setPodiumCategory] = useState<Gender | 'ALL'>('ALL');
-  const [showPrizeModal, setShowPrizeModal] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState<ChallengeMonth | 'overall'>('overall');
+  const [eventsList, setEventsList] = useState<OfficialEvent[]>(OFFICIAL_EVENTS);
 
   const handleNav = (tab: NavTab) => {
     soundFX.playRaceBeep();
-    if (onNavigate) {
-      onNavigate(tab);
-    } else if (tab === 'leaderboard' && onViewAllLeaderboard) {
-      onViewAllLeaderboard();
-    } else if (tab === 'timeline' && onViewTimeline) {
-      onViewTimeline();
-    }
+    if (onNavigate) onNavigate(tab);
+    else if (tab === 'leaderboard' && onViewAllLeaderboard) onViewAllLeaderboard();
+    else if (tab === 'timeline' && onViewTimeline) onViewTimeline();
   };
 
-  // Compute leaderboard based on selected podium month and category
-  const activeParticipants = participants.filter((p) => {
-    if (!p.active) return false;
-    if (podiumCategory !== 'ALL' && p.gender !== podiumCategory) return false;
-    return true;
-  });
-  
-  const sortedList = [...activeParticipants].sort((a, b) => {
-    if (podiumMonth === 'overall') {
-      return b.totalPoints - a.totalPoints || b.totalDistanceKm - a.totalDistanceKm;
-    }
-    const aRec = a.monthlyRecords && a.monthlyRecords[podiumMonth]?.totalPoints || 0;
-    const bRec = b.monthlyRecords && b.monthlyRecords[podiumMonth]?.totalPoints || 0;
-    return bRec - aRec || (b.monthlyRecords && b.monthlyRecords[podiumMonth]?.distanceKm || 0) - (a.monthlyRecords && a.monthlyRecords[podiumMonth]?.distanceKm || 0);
-  });
+  const handleToggleRegister = (id: string) => {
+    soundFX.playRankUp();
+    confetti({
+      particleCount: 40,
+      spread: 60,
+      origin: { y: 0.6 },
+      colors: ['#FF5722', '#00E5FF', '#FBBF24'],
+    });
+    setEventsList(prev => prev.map(ev => {
+      if (ev.id === id) {
+        const nextState = !ev.isRegistered;
+        return {
+          ...ev,
+          isRegistered: nextState,
+          registeredCount: nextState ? ev.registeredCount + 1 : Math.max(0, ev.registeredCount - 1),
+        };
+      }
+      return ev;
+    }));
+  };
 
-  const p1 = sortedList[0];
-  const p2 = sortedList[1];
-  const p3 = sortedList[2];
-  const top5 = sortedList.slice(0, 5);
+  // Compute Metrics
+  const activeParticipants = participants.filter((p) => p.active);
+  const totalCompanyDist = Math.round(activeParticipants.reduce((acc, p) => acc + (p.totalDistanceKm || 0), 0) * 10) / 10;
+  const totalCompanyPts = Math.round(activeParticipants.reduce((acc, p) => acc + (p.totalPoints || 0), 0) * 10) / 10;
+  const targetKm = season?.targetCompanyDistanceKm || 15000;
+  const progressPercent = Math.min(100, Math.round((totalCompanyDist / targetKm) * 100));
 
-  const mvp = findMVP(activeParticipants, podiumMonth === 'overall' ? undefined : podiumMonth) || p1;
+  // Men & Women Top 3 for instant visual podium
+  const topMen = getCategoryRankings(participants, 'Male', selectedMonth).slice(0, 3);
+  const topWomen = getCategoryRankings(participants, 'Female', selectedMonth).slice(0, 3);
 
-  // Women & Men Apex Champions for Spotlight
-  const topWomen = getCategoryRankings(participants, 'Female', podiumMonth)[0];
-  const topMen = getCategoryRankings(participants, 'Male', podiumMonth)[0];
+  const menChamp = topMen[0];
+  const womenChamp = topWomen[0];
 
-  // Aggregate Metrics
-  const totalCompanyDist = Math.round(participants.reduce((acc, p) => acc + (p.totalDistanceKm || 0), 0) * 10) / 10;
-  const totalCompanyPts = Math.round(participants.reduce((acc, p) => acc + (p.totalPoints || 0), 0) * 10) / 10;
-  const totalActivities = participants.reduce((acc, p) => acc + (p.totalActivities || 0), 0);
-  
   const currentActiveMonth = season?.currentActiveMonth || 'august';
-  const club80Count = participants.filter((p) => {
-    const activeRec = p.monthlyRecords && p.monthlyRecords[currentActiveMonth];
-    return activeRec && activeRec.distanceKm >= 80;
-  }).length;
+  const monthStages = [
+    { key: 'june', label: 'JUN', status: 'completed', icon: '🏁' },
+    { key: 'july', label: 'JUL', status: 'completed', icon: '⚡' },
+    { key: 'august', label: 'AUG', status: 'active', icon: '🔥' },
+    { key: 'september', label: 'SEP', status: 'upcoming', icon: '🎯' },
+    { key: 'october', label: 'OCT', status: 'upcoming', icon: '🚀' },
+    { key: 'november', label: 'NOV', status: 'upcoming', icon: '🏆' },
+  ];
 
   return (
-    <div className="space-y-8 pb-12">
+    <div className="space-y-8 pb-16">
       
-      {/* 1. Racing Countdown & Target Widget */}
-      <CountdownWidget 
-        season={season} 
-        totalCompanyDistanceKm={totalCompanyDist} 
-      />
+      {/* ================================================================ */}
+      {/* 1. HERO BANNER: MINIMAL, HIGH IMPACT (Apple/F1 Aesthetic)          */}
+      {/* ================================================================ */}
+      <section className="relative overflow-hidden rounded-3xl glass-panel border border-white/10 p-6 sm:p-10 shadow-2xl backdrop-blur-2xl">
+        {/* Background ambient lighting */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-[#FF5722]/15 rounded-full blur-3xl pointer-events-none -z-0" />
+        <div className="absolute bottom-0 left-0 w-80 h-80 bg-[#00E5FF]/10 rounded-full blur-3xl pointer-events-none -z-0" />
 
-      {/* 2. Top Telemetry Stat Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Distance */}
-        <div className="glass-panel-orange glass-panel-hover rounded-2xl p-4 relative overflow-hidden shadow-lg group">
-          <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition">
-            <Flame className="w-16 h-16 text-orange-500" />
-          </div>
-          <div className="flex items-center gap-2 text-xs font-mono text-orange-400 font-bold uppercase tracking-wider mb-1">
-            <Flame className="w-4 h-4 text-orange-500" />
-            Total Logged Mileage
-          </div>
-          <div className="text-2xl sm:text-3xl font-black font-mono text-white tracking-tight f1-font">
-            {totalCompanyDist.toLocaleString()} <span className="text-sm font-normal text-slate-400 font-sans">KM</span>
-          </div>
-          <div className="text-[11px] text-slate-300 font-mono mt-1 flex items-center gap-1">
-            <span className="text-emerald-400 font-bold">↑ Active</span> across 6 departments
-          </div>
-        </div>
-
-        {/* Total Points */}
-        <div className="glass-panel-blue glass-panel-hover rounded-2xl p-4 relative overflow-hidden shadow-lg group">
-          <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition">
-            <Zap className="w-16 h-16 text-cyan-400" />
-          </div>
-          <div className="flex items-center gap-2 text-xs font-mono text-cyan-400 font-bold uppercase tracking-wider mb-1">
-            <Zap className="w-4 h-4 text-cyan-400" />
-            Total Challenge Points
-          </div>
-          <div className="text-2xl sm:text-3xl font-black font-mono text-white tracking-tight f1-font">
-            {totalCompanyPts.toLocaleString()} <span className="text-sm font-normal text-slate-400 font-sans">PTS</span>
-          </div>
-          <div className="text-[11px] text-slate-300 font-mono mt-1">
-            Distance + 80km + event bonuses
-          </div>
-        </div>
-
-        {/* Total Activities */}
-        <div className="glass-panel-purple glass-panel-hover rounded-2xl p-4 relative overflow-hidden shadow-lg group">
-          <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition">
-            <Activity className="w-16 h-16 text-purple-400" />
-          </div>
-          <div className="flex items-center gap-2 text-xs font-mono text-purple-400 font-bold uppercase tracking-wider mb-1">
-            <Activity className="w-4 h-4 text-purple-400" />
-            Total Activities
-          </div>
-          <div className="text-2xl sm:text-3xl font-black font-mono text-white tracking-tight f1-font">
-            {totalActivities} <span className="text-sm font-normal text-slate-400 font-sans">LOGS</span>
-          </div>
-          <div className="text-[11px] text-slate-300 font-mono mt-1">
-            Runs, rides, trails & marathons
-          </div>
-        </div>
-
-        {/* 80KM Club Members */}
-        <div className="glass-panel-emerald glass-panel-hover rounded-2xl p-4 relative overflow-hidden shadow-lg group">
-          <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition">
-            <Award className="w-16 h-16 text-emerald-400" />
-          </div>
-          <div className="flex items-center gap-2 text-xs font-mono text-emerald-400 font-bold uppercase tracking-wider mb-1">
-            <Award className="w-4 h-4 text-emerald-400" />
-            {season.currentActiveMonth.toUpperCase()} 80KM Club
-          </div>
-          <div className="text-2xl sm:text-3xl font-black font-mono text-emerald-400 tracking-tight f1-font">
-            {club80Count} / {participants.length} <span className="text-sm font-normal text-slate-400 font-sans">ATHLETES</span>
-          </div>
-          <div className="text-[11px] text-slate-300 font-mono mt-1">
-            Unlocked +50 threshold bonus points
-          </div>
-        </div>
-      </div>
-
-      {/* 3. Formula 1 Style Podium & MVP Spotlight */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        
-        {/* Left 8 Cols: F1 3D Podium & Top 5 */}
-        <div className="lg:col-span-8 glass-panel rounded-2xl p-5 sm:p-6 shadow-2xl space-y-6 relative overflow-hidden">
-          
-          {/* Header with Category & Month Switcher */}
-          <div className="flex flex-col gap-3 border-b border-white/10 pb-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Trophy className="w-5 h-5 text-amber-400" />
-                  <h3 className="text-lg font-black tracking-tight text-white uppercase f1-font">
-                    LEADERBOARD APEX PODIUM
-                  </h3>
-                </div>
-                <p className="text-xs text-slate-400 font-mono">
-                  Separate Women & Men Division Categories • Top 5 Prizes Awarded
-                </p>
-              </div>
-
-              <button
-                onClick={() => {
-                  soundFX.playRaceBeep();
-                  setShowPrizeModal(true);
-                }}
-                className="flex items-center gap-1.5 glass-panel-orange hover:bg-orange-500/20 text-amber-300 font-mono text-xs px-3 py-1.5 rounded-xl transition cursor-pointer border border-amber-500/30 w-fit"
-              >
-                <Gift className="w-3.5 h-3.5 text-amber-400" />
-                <span>Prize Tiers (1st-5th)</span>
-              </button>
-            </div>
-
-            {/* Category Division Tabs & Month Select */}
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-              {/* Category selector */}
-              <div className="flex items-center gap-1 glass-panel p-1 rounded-xl font-mono text-xs">
-                <button
-                  onClick={() => {
-                    soundFX.playRaceBeep();
-                    setPodiumCategory('ALL');
-                  }}
-                  className={`px-3 py-1 rounded-lg transition font-bold cursor-pointer ${
-                    podiumCategory === 'ALL' ? 'bg-orange-500 text-black shadow-md' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  All Athletes
-                </button>
-                <button
-                  onClick={() => {
-                    soundFX.playRaceBeep();
-                    setPodiumCategory('Female');
-                  }}
-                  className={`px-3 py-1 rounded-lg transition font-bold flex items-center gap-1 cursor-pointer ${
-                    podiumCategory === 'Female' ? 'bg-pink-500 text-white shadow-md' : 'text-pink-300/70 hover:text-pink-200'
-                  }`}
-                >
-                  <span>👩 Women's</span>
-                </button>
-                <button
-                  onClick={() => {
-                    soundFX.playRaceBeep();
-                    setPodiumCategory('Male');
-                  }}
-                  className={`px-3 py-1 rounded-lg transition font-bold flex items-center gap-1 cursor-pointer ${
-                    podiumCategory === 'Male' ? 'bg-blue-500 text-black shadow-md' : 'text-blue-300/70 hover:text-blue-200'
-                  }`}
-                >
-                  <span>👨 Men's</span>
-                </button>
-              </div>
-
-              {/* Month Select */}
-              <div className="flex items-center gap-1 glass-panel p-1 rounded-xl font-mono text-xs overflow-x-auto">
-                <button
-                  onClick={() => setPodiumMonth('overall')}
-                  className={`px-2.5 py-1 rounded-lg transition font-bold cursor-pointer ${
-                    podiumMonth === 'overall' ? 'bg-[#FF5722] text-black shadow-md' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  OVERALL
-                </button>
-                {MONTHS.slice(0, 3).map((m) => (
-                  <button
-                    key={m.key}
-                    onClick={() => setPodiumMonth(m.key)}
-                    className={`px-2 py-1 rounded-lg transition font-bold uppercase cursor-pointer ${
-                      podiumMonth === m.key ? 'bg-[#FF5722] text-black shadow-md' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    {m.short}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* 3D Visual Podium Component */}
-          <div className="pt-6 pb-2 grid grid-cols-3 gap-2 sm:gap-4 items-end max-w-2xl mx-auto">
-            
-            {/* P2: Silver (Left) */}
-            {p2 && (
-              <div 
-                onClick={() => {
-                  soundFX.playRaceBeep();
-                  onSelectParticipant(p2);
-                }}
-                className="group cursor-pointer flex flex-col items-center text-center transition transform hover:-translate-y-1"
-              >
-                <div className="relative mb-2">
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border-2 border-slate-300 shadow-[0_0_15px_rgba(203,213,225,0.3)] bg-slate-800">
-                    <img src={p2.avatarUrl} alt={p2.name} className="w-full h-full object-cover group-hover:scale-110 transition duration-300" />
-                  </div>
-                  <div className="absolute -top-2 -left-2 bg-gradient-to-r from-slate-200 to-slate-400 text-black text-xs font-black font-mono w-6 h-6 rounded-full flex items-center justify-center shadow-md">
-                    2
-                  </div>
-                  <div className="absolute -bottom-1.5 inset-x-0 mx-auto w-max px-2 py-0.2 glass-panel text-[10px] font-mono font-bold text-slate-200 rounded border border-slate-400/40">
-                    🥈 2ND PLACE
-                  </div>
-                </div>
-
-                <div className="font-bold text-xs sm:text-sm text-white truncate max-w-[110px] group-hover:text-cyan-400 transition">
-                  {p2.name}
-                </div>
-                <div className="text-[10px] text-slate-400 font-mono truncate max-w-[110px]">
-                  {p2.gender === 'Female' ? '👩 Women' : '👨 Men'} • {p2.department.split(' ')[0]}
-                </div>
-
-                {/* Podium Pedestal */}
-                <div className="w-full h-28 sm:h-36 mt-3 rounded-t-2xl glass-panel border-t-2 border-slate-300 p-2 sm:p-3 flex flex-col justify-between shadow-inner">
-                  <div className="text-center">
-                    <div className="text-xs sm:text-sm font-black font-mono text-white f1-font">
-                      {podiumMonth === 'overall' ? p2.totalPoints : p2.monthlyRecords[podiumMonth]?.totalPoints} <span className="text-[10px] text-slate-400 font-normal font-sans">PTS</span>
-                    </div>
-                    <div className="text-[10px] sm:text-xs font-mono text-cyan-400 font-bold">
-                      {podiumMonth === 'overall' ? p2.totalDistanceKm : p2.monthlyRecords[podiumMonth]?.distanceKm} KM
-                    </div>
-                  </div>
-                  <div className="text-[9px] font-mono text-slate-300 truncate" title="Nike Alphafly 3">
-                    🎁 Nike Alphafly 3
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* P1: Gold Champion (Center & Highest) */}
-            {p1 && (
-              <div 
-                onClick={() => {
-                  soundFX.playFanfare();
-                  onSelectParticipant(p1);
-                }}
-                className="group cursor-pointer flex flex-col items-center text-center transition transform hover:-translate-y-2 z-10"
-              >
-                <div className="relative mb-2">
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border-2 border-amber-400 shadow-[0_0_25px_rgba(251,191,36,0.6)] bg-slate-800 ring-4 ring-amber-400/20">
-                    <img src={p1.avatarUrl} alt={p1.name} className="w-full h-full object-cover group-hover:scale-110 transition duration-300" />
-                  </div>
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-400 text-black px-2 py-0.5 rounded-full flex items-center gap-1 shadow-lg">
-                    <Crown className="w-3.5 h-3.5 fill-black" />
-                    <span className="text-xs font-black font-mono">1ST</span>
-                  </div>
-                  <div className="absolute -bottom-1.5 inset-x-0 mx-auto w-max px-2.5 py-0.5 bg-amber-400 text-black text-[10px] font-mono font-black rounded-full shadow-[0_0_12px_rgba(245,158,11,0.7)]">
-                    🥇 1ST PLACE CHAMPION
-                  </div>
-                </div>
-
-                <div className="font-black text-sm sm:text-base text-amber-300 truncate max-w-[130px] group-hover:underline">
-                  {p1.name}
-                </div>
-                <div className="text-[10px] text-slate-400 font-mono truncate max-w-[130px]">
-                  {p1.gender === 'Female' ? '👩 Women' : '👨 Men'} • {p1.department.split(' ')[0]}
-                </div>
-
-                {/* Gold Podium Pedestal */}
-                <div className="w-full h-36 sm:h-48 mt-3 rounded-t-2xl glass-panel-orange border-t-4 border-amber-400 p-2 sm:p-3 flex flex-col justify-between shadow-[0_0_30px_rgba(245,158,11,0.25)]">
-                  <div className="text-center">
-                    <div className="text-sm sm:text-lg font-black font-mono text-amber-300 f1-font">
-                      {podiumMonth === 'overall' ? p1.totalPoints : p1.monthlyRecords[podiumMonth]?.totalPoints} <span className="text-xs text-amber-200/70 font-sans">PTS</span>
-                    </div>
-                    <div className="text-xs sm:text-sm font-bold font-mono text-white">
-                      {podiumMonth === 'overall' ? p1.totalDistanceKm : p1.monthlyRecords[podiumMonth]?.distanceKm} KM
-                    </div>
-                  </div>
-                  <div className="text-[10px] font-mono text-amber-300 font-bold glass-panel py-1 rounded border border-amber-400/40 truncate" title="Garmin 965 + Trophy">
-                    🎁 Garmin 965 + Trophy
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* P3: Bronze (Right) */}
-            {p3 && (
-              <div 
-                onClick={() => {
-                  soundFX.playRaceBeep();
-                  onSelectParticipant(p3);
-                }}
-                className="group cursor-pointer flex flex-col items-center text-center transition transform hover:-translate-y-1"
-              >
-                <div className="relative mb-2">
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border-2 border-amber-700 shadow-[0_0_15px_rgba(180,83,9,0.3)] bg-slate-800">
-                    <img src={p3.avatarUrl} alt={p3.name} className="w-full h-full object-cover group-hover:scale-110 transition duration-300" />
-                  </div>
-                  <div className="absolute -top-2 -right-2 bg-gradient-to-r from-amber-700 to-amber-900 text-white text-xs font-black font-mono w-6 h-6 rounded-full flex items-center justify-center shadow-md">
-                    3
-                  </div>
-                  <div className="absolute -bottom-1.5 inset-x-0 mx-auto w-max px-2 py-0.2 glass-panel text-[10px] font-mono font-bold text-amber-400 rounded border border-amber-700/40">
-                    🥉 3RD PLACE
-                  </div>
-                </div>
-
-                <div className="font-bold text-xs sm:text-sm text-white truncate max-w-[110px] group-hover:text-orange-400 transition">
-                  {p3.name}
-                </div>
-                <div className="text-[10px] text-slate-400 font-mono truncate max-w-[110px]">
-                  {p3.gender === 'Female' ? '👩 Women' : '👨 Men'} • {p3.department.split(' ')[0]}
-                </div>
-
-                {/* Podium Pedestal */}
-                <div className="w-full h-24 sm:h-30 mt-3 rounded-t-2xl glass-panel border-t-2 border-amber-700 p-2 sm:p-3 flex flex-col justify-between shadow-inner">
-                  <div className="text-center">
-                    <div className="text-xs sm:text-sm font-black font-mono text-white f1-font">
-                      {podiumMonth === 'overall' ? p3.totalPoints : p3.monthlyRecords[podiumMonth]?.totalPoints} <span className="text-[10px] text-slate-400 font-normal font-sans">PTS</span>
-                    </div>
-                    <div className="text-[10px] sm:text-xs font-mono text-orange-400 font-bold">
-                      {podiumMonth === 'overall' ? p3.totalDistanceKm : p3.monthlyRecords[podiumMonth]?.distanceKm} KM
-                    </div>
-                  </div>
-                  <div className="text-[9px] font-mono text-amber-400 truncate" title="Shokz OpenRun Pro 2">
-                    🎁 Shokz OpenRun Pro 2
-                  </div>
-                </div>
-              </div>
-            )}
-
-          </div>
-
-          {/* Top 4 & 5 Prize Placement Quick Cards & Full Standings Button */}
-          <div className="pt-4 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-              <span className="text-xs font-mono font-bold text-slate-400 uppercase">Top 5 Prize Qualifiers:</span>
-              {top5.slice(3).map((p, idx) => {
-                const placeNum = idx + 4;
-                const prize = getPrizeForRank(placeNum);
-                return (
-                  <div
-                    key={p.id}
-                    onClick={() => onSelectParticipant(p)}
-                    className="flex items-center gap-2 glass-panel glass-panel-hover px-3 py-1.5 rounded-xl cursor-pointer transition text-xs font-mono"
-                  >
-                    <span className="font-black text-cyan-400">{prize?.trophyIcon} #{placeNum}</span>
-                    <span className="text-white truncate max-w-[90px]">{p.name}</span>
-                    <span className="text-amber-400 font-bold">{p.totalPoints} pts</span>
-                  </div>
-                );
-              })}
-            </div>
-
-            <button
-              onClick={() => handleNav('leaderboard')}
-              className="flex items-center gap-1.5 text-xs font-bold text-orange-400 hover:text-white glass-panel-orange px-3.5 py-2 rounded-xl transition whitespace-nowrap cursor-pointer"
-            >
-              <span>Explore Categories</span>
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-
-        </div>
-
-        {/* Right 4 Cols: Category Champions Dual Spotlight & Department Quick Battle */}
-        <div className="lg:col-span-4 space-y-6">
-          
-          {/* Dual Category Champions Spotlight Card */}
-          <div className="glass-panel-orange rounded-2xl p-5 shadow-[0_0_25px_rgba(245,158,11,0.15)] relative overflow-hidden space-y-4">
-            <div className="flex items-center justify-between border-b border-amber-500/20 pb-3">
-              <div className="flex items-center gap-2">
-                <Crown className="w-4 h-4 text-amber-400 fill-amber-400" />
-                <span className="text-xs font-black font-mono text-amber-400 tracking-wider uppercase f1-font">
-                  CATEGORY LEADERS
-                </span>
-              </div>
-              <span className="text-[10px] font-mono glass-panel text-amber-300 px-2 py-0.5 rounded-lg border border-amber-400/40">
-                1ST PLACE PRIZE
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+          <div className="space-y-3">
+            {/* Live Indicator */}
+            <div className="flex items-center gap-2">
+              <span className="flex h-2.5 w-2.5 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00E5FF] opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#00E5FF]"></span>
+              </span>
+              <span className="font-mono text-xs font-black tracking-widest text-[#00E5FF] uppercase">
+                F1 TELEMETRY • LIVE CHAMPIONSHIP
               </span>
             </div>
 
-            {/* Women's Leader */}
-            {topWomen && (
-              <div
-                onClick={() => onSelectParticipant(topWomen)}
-                className="glass-panel-purple p-3 rounded-xl border border-pink-500/30 flex items-center justify-between cursor-pointer hover:border-pink-500/60 transition"
-              >
-                <div className="flex items-center gap-3">
-                  <img src={topWomen.avatarUrl} alt={topWomen.name} className="w-10 h-10 rounded-xl object-cover border border-pink-400" />
-                  <div className="min-w-0">
-                    <div className="text-[10px] font-bold text-pink-300 font-mono flex items-center gap-1">
-                      <span>👩 WOMEN'S LEADER</span>
-                    </div>
-                    <div className="font-black text-white text-xs truncate">{topWomen.name}</div>
-                    <div className="text-[10px] text-slate-400 truncate">{topWomen.department.split(' ')[0]}</div>
-                  </div>
-                </div>
-                <div className="text-right font-mono">
-                  <div className="text-xs font-black text-pink-300">{topWomen.totalPoints} PTS</div>
-                  <div className="text-[10px] text-slate-400">{topWomen.totalDistanceKm} KM</div>
-                </div>
+            {/* Huge Minimal Title */}
+            <div>
+              <div className="text-3xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight uppercase f1-font leading-none">
+                B2B COMMERCE
               </div>
-            )}
-
-            {/* Men's Leader */}
-            {topMen && (
-              <div
-                onClick={() => onSelectParticipant(topMen)}
-                className="glass-panel-blue p-3 rounded-xl border border-blue-500/30 flex items-center justify-between cursor-pointer hover:border-blue-500/60 transition"
-              >
-                <div className="flex items-center gap-3">
-                  <img src={topMen.avatarUrl} alt={topMen.name} className="w-10 h-10 rounded-xl object-cover border border-blue-400" />
-                  <div className="min-w-0">
-                    <div className="text-[10px] font-bold text-blue-300 font-mono flex items-center gap-1">
-                      <span>👨 MEN'S LEADER</span>
-                    </div>
-                    <div className="font-black text-white text-xs truncate">{topMen.name}</div>
-                    <div className="text-[10px] text-slate-400 truncate">{topMen.department.split(' ')[0]}</div>
-                  </div>
-                </div>
-                <div className="text-right font-mono">
-                  <div className="text-xs font-black text-blue-300">{topMen.totalPoints} PTS</div>
-                  <div className="text-[10px] text-slate-400">{topMen.totalDistanceKm} KM</div>
-                </div>
+              <div className="text-4xl sm:text-6xl lg:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#FF5722] via-amber-400 to-[#00E5FF] tracking-tight uppercase f1-font leading-none mt-1">
+                STRAVA GP 2026
               </div>
-            )}
+            </div>
 
+            {/* Sport Discipline Chips */}
+            <div className="flex flex-wrap items-center gap-2 pt-2">
+              <span className="glass-panel px-3.5 py-1 rounded-full text-xs font-mono font-bold text-white border border-white/15 flex items-center gap-1.5">
+                <span>🏃</span> RUN
+              </span>
+              <span className="text-slate-600">•</span>
+              <span className="glass-panel px-3.5 py-1 rounded-full text-xs font-mono font-bold text-white border border-white/15 flex items-center gap-1.5">
+                <span>🚴</span> RIDE
+              </span>
+              <span className="text-slate-600">•</span>
+              <span className="glass-panel px-3.5 py-1 rounded-full text-xs font-mono font-bold text-white border border-white/15 flex items-center gap-1.5">
+                <span>🏔️</span> HIKE
+              </span>
+              <span className="text-slate-600">•</span>
+              <span className="glass-panel-orange px-3.5 py-1 rounded-full text-xs font-mono font-bold text-orange-400 border border-orange-500/40">
+                STAGE 3: AUG SPRINT
+              </span>
+            </div>
+          </div>
+
+          {/* Quick Action Hub */}
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-3">
             <button
               onClick={() => handleNav('leaderboard')}
-              className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-black text-xs py-2.5 rounded-xl transition font-mono flex items-center justify-center gap-1.5 shadow-lg cursor-pointer"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-[#FF5722] hover:bg-[#ff7043] text-black font-black font-mono text-sm px-6 py-3.5 rounded-2xl shadow-[0_0_25px_rgba(255,87,34,0.4)] transition cursor-pointer"
             >
-              <span>View Full Category Standings</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+              <Trophy className="w-4 h-4" />
+              <span>VIEW LEADERBOARD</span>
             </button>
-          </div>
 
-          {/* Department Battle Quick Card */}
-          <div className="glass-panel-purple rounded-2xl p-5 shadow-xl space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-purple-400" />
-                <h4 className="text-sm font-black text-white uppercase tracking-tight f1-font">
-                  DEPARTMENT RIVALRY
-                </h4>
-              </div>
+            {onOpenPosterExport && (
               <button
-                onClick={() => handleNav('departments')}
-                className="text-xs font-mono text-purple-400 hover:underline flex items-center gap-1 cursor-pointer"
+                onClick={onOpenPosterExport}
+                className="flex items-center justify-center gap-2 glass-panel-blue hover:bg-cyan-500/20 text-cyan-300 font-bold font-mono text-sm px-5 py-3.5 rounded-2xl border border-cyan-400/40 transition cursor-pointer"
               >
-                <span>Full Battle</span>
-                <ChevronRight className="w-3.5 h-3.5" />
+                <Share2 className="w-4 h-4" />
+                <span>POSTER</span>
               </button>
-            </div>
-
-            <p className="text-xs text-slate-300 leading-relaxed font-mono">
-              Engineering is leading by 25 points against Sales! Check per capita averages and team participation.
-            </p>
-
-            <button
-              onClick={() => handleNav('departments')}
-              className="w-full glass-panel hover:border-purple-400/50 text-purple-300 font-bold text-xs py-2.5 rounded-xl transition font-mono flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <span>Explore Department Standings</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+            )}
           </div>
-
         </div>
 
-      </div>
+        {/* Milestone Progress Bar */}
+        <div className="mt-8 pt-6 border-t border-white/10">
+          <div className="flex items-center justify-between text-xs font-mono mb-2">
+            <span className="text-slate-400 flex items-center gap-1.5">
+              <span>🎯</span> TARGET PROGRESS
+            </span>
+            <span className="text-white font-bold">
+              <span className="text-orange-400 font-mono font-black">{totalCompanyDist.toLocaleString()} KM</span> / {targetKm.toLocaleString()} KM <span className="text-cyan-400">({progressPercent}%)</span>
+            </span>
+          </div>
+          <div className="w-full h-3 bg-black/60 rounded-full overflow-hidden border border-white/10 p-0.5">
+            <div 
+              className="h-full rounded-full bg-gradient-to-r from-[#FF5722] via-amber-400 to-[#00E5FF] shadow-[0_0_15px_rgba(255,87,34,0.8)] transition-all duration-1000"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        </div>
+      </section>
 
-      {/* 4. Latest Announcements & Live Photo Highlights */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      {/* ================================================================ */}
+      {/* 2. TELEMETRY KPI CARDS (Numbers & Icons First)                   */}
+      {/* ================================================================ */}
+      <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         
-        {/* Announcements Preview */}
-        <div className="lg:col-span-6 glass-panel rounded-2xl p-5 shadow-xl space-y-4">
-          <div className="flex items-center justify-between border-b border-white/10 pb-3">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-orange-400" />
-              <h4 className="text-sm font-black text-white uppercase tracking-tight f1-font">
-                RACE BULLETINS & ANNOUNCEMENTS
-              </h4>
-            </div>
-            <button
-              onClick={() => handleNav('announcements')}
-              className="text-xs font-mono text-orange-400 hover:underline cursor-pointer"
-            >
-              View All
-            </button>
+        {/* 1. Athletes */}
+        <div className="glass-panel glass-panel-hover rounded-2xl p-4 sm:p-5 border border-white/10 relative overflow-hidden group">
+          <div className="flex items-center justify-between text-slate-400 text-xs font-mono font-bold mb-2">
+            <span>ATHLETES</span>
+            <span className="text-lg">👥</span>
+          </div>
+          <div className="text-3xl sm:text-4xl font-black font-mono text-white tracking-tight f1-font">
+            {activeParticipants.length}
+          </div>
+          <div className="text-[11px] font-mono text-emerald-400 mt-1 flex items-center gap-1">
+            <span>↑ 100% Active</span>
+          </div>
+        </div>
+
+        {/* 2. Distance */}
+        <div className="glass-panel-orange glass-panel-hover rounded-2xl p-4 sm:p-5 border border-orange-500/30 relative overflow-hidden group">
+          <div className="flex items-center justify-between text-orange-400 text-xs font-mono font-bold mb-2">
+            <span>TOTAL DISTANCE</span>
+            <span className="text-lg">🏃</span>
+          </div>
+          <div className="text-3xl sm:text-4xl font-black font-mono text-white tracking-tight f1-font">
+            {totalCompanyDist.toLocaleString()} <span className="text-xs font-sans text-slate-400 font-normal">KM</span>
+          </div>
+          <div className="text-[11px] font-mono text-orange-400 mt-1 flex items-center gap-1">
+            <span>🔥 6 Departments</span>
+          </div>
+        </div>
+
+        {/* 3. Points */}
+        <div className="glass-panel-blue glass-panel-hover rounded-2xl p-4 sm:p-5 border border-cyan-400/30 relative overflow-hidden group">
+          <div className="flex items-center justify-between text-cyan-400 text-xs font-mono font-bold mb-2">
+            <span>TOTAL POINTS</span>
+            <span className="text-lg">⭐</span>
+          </div>
+          <div className="text-3xl sm:text-4xl font-black font-mono text-white tracking-tight f1-font">
+            {totalCompanyPts.toLocaleString()} <span className="text-xs font-sans text-slate-400 font-normal">PTS</span>
+          </div>
+          <div className="text-[11px] font-mono text-cyan-300 mt-1">
+            <span>Distance + Bonuses</span>
+          </div>
+        </div>
+
+        {/* 4. Events */}
+        <div className="glass-panel-purple glass-panel-hover rounded-2xl p-4 sm:p-5 border border-purple-500/30 relative overflow-hidden group">
+          <div className="flex items-center justify-between text-purple-400 text-xs font-mono font-bold mb-2">
+            <span>OFFICIAL EVENTS</span>
+            <span className="text-lg">🏆</span>
+          </div>
+          <div className="text-3xl sm:text-4xl font-black font-mono text-white tracking-tight f1-font">
+            {eventsList.length} <span className="text-xs font-sans text-slate-400 font-normal">EVTS</span>
+          </div>
+          <div className="text-[11px] font-mono text-purple-300 mt-1">
+            <span>+25 pts / event</span>
+          </div>
+        </div>
+
+        {/* 5. Countdown Days */}
+        <div className="glass-panel glass-panel-hover rounded-2xl p-4 sm:p-5 border border-white/10 relative overflow-hidden col-span-2 sm:col-span-1 group">
+          <div className="flex items-center justify-between text-amber-400 text-xs font-mono font-bold mb-2">
+            <span>DAYS REMAINING</span>
+            <span className="text-lg">⏳</span>
+          </div>
+          <div className="text-3xl sm:text-4xl font-black font-mono text-amber-400 tracking-tight f1-font">
+            123 <span className="text-xs font-sans text-slate-400 font-normal">DAYS</span>
+          </div>
+          <div className="text-[11px] font-mono text-slate-400 mt-1">
+            <span>Dec 15 Victory Gala</span>
+          </div>
+        </div>
+
+      </section>
+
+      {/* ================================================================ */}
+      {/* 3. VISUAL CHALLENGE TIMELINE (F1 Grand Prix Track Progress)      */}
+      {/* ================================================================ */}
+      <section className="glass-panel rounded-3xl p-6 border border-white/10 shadow-xl">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🏁</span>
+            <h3 className="text-sm sm:text-base font-black text-white uppercase tracking-wider f1-font">
+              CHAMPIONSHIP JOURNEY
+            </h3>
+          </div>
+          <button
+            onClick={() => handleNav('timeline')}
+            className="text-xs font-mono text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer font-bold"
+          >
+            <span>FULL ROADMAP</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* Visual Stage Nodes */}
+        <div className="grid grid-cols-6 gap-2 sm:gap-4 relative pt-2">
+          {/* Connector Line behind nodes */}
+          <div className="absolute top-1/2 left-4 right-4 h-1 bg-white/10 -translate-y-1/2 z-0 hidden sm:block" />
+
+          {monthStages.map((stage) => {
+            const isCompleted = stage.status === 'completed';
+            const isActive = stage.status === 'active';
+
+            return (
+              <div 
+                key={stage.key}
+                className={`relative z-10 rounded-2xl p-3 sm:p-4 text-center border transition flex flex-col items-center justify-center gap-1.5 ${
+                  isActive
+                    ? 'glass-panel-orange border-orange-500 shadow-[0_0_20px_rgba(255,87,34,0.4)] scale-105'
+                    : isCompleted
+                    ? 'glass-panel border-amber-400/50 bg-amber-400/5'
+                    : 'glass-panel border-white/5 opacity-60'
+                }`}
+              >
+                <div className="text-xl sm:text-2xl">{stage.icon}</div>
+                <div className={`font-mono text-xs sm:text-sm font-black ${isActive ? 'text-orange-400' : isCompleted ? 'text-amber-400' : 'text-slate-400'}`}>
+                  {stage.label}
+                </div>
+                <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-full ${
+                  isActive 
+                    ? 'bg-orange-500 text-black' 
+                    : isCompleted 
+                    ? 'bg-amber-400/20 text-amber-300' 
+                    : 'bg-white/5 text-slate-500'
+                }`}>
+                  {isActive ? 'ACTIVE' : isCompleted ? 'LOCKED' : 'STAGE'}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ================================================================ */}
+      {/* 4. DUAL CATEGORY CHAMPIONS SPOTLIGHT (F1 Driver Cards)           */}
+      {/* ================================================================ */}
+      <section className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Crown className="w-5 h-5 text-amber-400 fill-amber-400" />
+            <h3 className="text-lg sm:text-xl font-black text-white uppercase tracking-tight f1-font">
+              APEX CHAMPIONS
+            </h3>
           </div>
 
-          <div className="space-y-3">
-            {announcements.slice(0, 2).map((ann) => (
-              <div
-                key={ann.id}
-                onClick={() => handleNav('announcements')}
-                className="glass-panel glass-panel-hover p-3.5 rounded-xl cursor-pointer transition space-y-1.5"
+          {/* Month Selector */}
+          <div className="flex items-center gap-1 glass-panel p-1 rounded-xl text-xs font-mono">
+            {(['overall', 'june', 'july'] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => {
+                  soundFX.playRaceBeep();
+                  setSelectedMonth(m);
+                }}
+                className={`px-3 py-1 rounded-lg font-bold transition uppercase cursor-pointer ${
+                  selectedMonth === m
+                    ? 'bg-[#FF5722] text-black shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
               >
-                <div className="flex items-center justify-between">
-                  <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg ${
-                    ann.priority === 'urgent' 
-                      ? 'bg-red-500/20 text-red-400 border border-red-500/40' 
-                      : 'glass-panel-orange text-orange-400'
-                  }`}>
-                    {ann.category.toUpperCase()} • {ann.priority.toUpperCase()}
-                  </span>
-                  <span className="text-[10px] font-mono text-slate-400">{ann.date}</span>
-                </div>
-                <h5 className="text-xs font-bold text-white leading-snug">{ann.title}</h5>
-                <p className="text-[11px] text-slate-300 line-clamp-2">{ann.content}</p>
-              </div>
+                {m === 'overall' ? 'OVERALL' : m.toUpperCase()}
+              </button>
             ))}
           </div>
         </div>
 
-        {/* Live Photo Highlights Feed */}
-        <div className="lg:col-span-6 glass-panel rounded-2xl p-5 shadow-xl space-y-4">
-          <div className="flex items-center justify-between border-b border-white/10 pb-3">
-            <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-cyan-400" />
-              <h4 className="text-sm font-black text-white uppercase tracking-tight f1-font">
-                COMMUNITY STRAVA FEED
-              </h4>
-            </div>
-            <button
-              onClick={() => handleNav('gallery')}
-              className="text-xs font-mono text-cyan-400 hover:underline cursor-pointer"
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+          
+          {/* Men's Champion Card */}
+          {menChamp && (
+            <div
+              onClick={() => {
+                soundFX.playRaceBeep();
+                onSelectParticipant(menChamp);
+              }}
+              className="glass-panel-blue glass-panel-hover rounded-3xl p-5 sm:p-6 border border-cyan-400/40 cursor-pointer shadow-xl relative overflow-hidden group"
             >
-              Open Gallery ({photos.length})
-            </button>
-          </div>
+              <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-400/10 rounded-full blur-2xl pointer-events-none" />
+              
+              <div className="flex items-start justify-between mb-4">
+                <span className="glass-panel-blue text-cyan-300 text-xs font-mono font-black px-3 py-1 rounded-full border border-cyan-400/30 flex items-center gap-1.5">
+                  <span>👨</span> MEN'S P1 APEX
+                </span>
+                <span className="text-2xl select-none">🥇</span>
+              </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            {photos.slice(0, 2).map((photo) => (
-              <div
-                key={photo.id}
-                onClick={() => handleNav('gallery')}
-                className="group relative rounded-2xl overflow-hidden border border-white/10 bg-slate-900 cursor-pointer aspect-video glass-panel-hover"
-              >
-                <img
-                  src={photo.imageUrl}
-                  alt={photo.caption}
-                  className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent p-2.5 flex flex-col justify-end">
-                  <div className="flex items-center gap-1 text-[10px] font-mono text-orange-400 font-bold">
-                    <span>{photo.participantName}</span>
-                    <span>•</span>
-                    <span>{photo.distanceKm} km</span>
+              <div className="flex items-center gap-4 sm:gap-5">
+                <div className="relative shrink-0">
+                  <img
+                    src={menChamp.avatarUrl}
+                    alt={menChamp.name}
+                    className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border-2 border-cyan-400 shadow-[0_0_20px_rgba(0,229,255,0.4)] group-hover:scale-105 transition"
+                  />
+                  <div className="absolute -bottom-2 -right-1 bg-cyan-400 text-black text-[10px] font-black font-mono px-2 py-0.5 rounded-full shadow-md">
+                    P1
                   </div>
-                  <p className="text-[11px] text-slate-200 truncate font-medium">{photo.caption}</p>
+                </div>
+
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="text-2xl sm:text-3xl font-black text-white truncate f1-font">
+                    {menChamp.name}
+                  </div>
+                  <div className="text-xs font-mono text-cyan-300 truncate">
+                    {menChamp.department}
+                  </div>
+
+                  {/* High Impact Numbers */}
+                  <div className="flex items-center gap-4 pt-2 font-mono">
+                    <div>
+                      <div className="text-[10px] text-slate-400 font-bold">DISTANCE</div>
+                      <div className="text-lg sm:text-xl font-black text-white">
+                        {menChamp.totalDistanceKm} <span className="text-xs font-normal text-slate-400 font-sans">KM</span>
+                      </div>
+                    </div>
+                    <div className="w-px h-6 bg-white/10" />
+                    <div>
+                      <div className="text-[10px] text-slate-400 font-bold">POINTS</div>
+                      <div className="text-lg sm:text-xl font-black text-cyan-400">
+                        {menChamp.totalPoints} <span className="text-xs font-normal text-slate-400 font-sans">PTS</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            ))}
+            </div>
+          )}
+
+          {/* Women's Champion Card */}
+          {womenChamp && (
+            <div
+              onClick={() => {
+                soundFX.playRaceBeep();
+                onSelectParticipant(womenChamp);
+              }}
+              className="glass-panel-orange glass-panel-hover rounded-3xl p-5 sm:p-6 border border-pink-500/40 cursor-pointer shadow-xl relative overflow-hidden group"
+            >
+              <div className="absolute top-0 right-0 w-32 h-32 bg-pink-500/10 rounded-full blur-2xl pointer-events-none" />
+              
+              <div className="flex items-start justify-between mb-4">
+                <span className="glass-panel-orange text-pink-300 text-xs font-mono font-black px-3 py-1 rounded-full border border-pink-500/30 flex items-center gap-1.5">
+                  <span>👩</span> WOMEN'S P1 APEX
+                </span>
+                <span className="text-2xl select-none">🥇</span>
+              </div>
+
+              <div className="flex items-center gap-4 sm:gap-5">
+                <div className="relative shrink-0">
+                  <img
+                    src={womenChamp.avatarUrl}
+                    alt={womenChamp.name}
+                    className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border-2 border-pink-500 shadow-[0_0_20px_rgba(236,72,153,0.4)] group-hover:scale-105 transition"
+                  />
+                  <div className="absolute -bottom-2 -right-1 bg-pink-500 text-black text-[10px] font-black font-mono px-2 py-0.5 rounded-full shadow-md">
+                    P1
+                  </div>
+                </div>
+
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="text-2xl sm:text-3xl font-black text-white truncate f1-font">
+                    {womenChamp.name}
+                  </div>
+                  <div className="text-xs font-mono text-pink-300 truncate">
+                    {womenChamp.department}
+                  </div>
+
+                  {/* High Impact Numbers */}
+                  <div className="flex items-center gap-4 pt-2 font-mono">
+                    <div>
+                      <div className="text-[10px] text-slate-400 font-bold">DISTANCE</div>
+                      <div className="text-lg sm:text-xl font-black text-white">
+                        {womenChamp.totalDistanceKm} <span className="text-xs font-normal text-slate-400 font-sans">KM</span>
+                      </div>
+                    </div>
+                    <div className="w-px h-6 bg-white/10" />
+                    <div>
+                      <div className="text-[10px] text-slate-400 font-bold">POINTS</div>
+                      <div className="text-lg sm:text-xl font-black text-pink-400">
+                        {womenChamp.totalPoints} <span className="text-xs font-normal text-slate-400 font-sans">PTS</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      </section>
+
+      {/* ================================================================ */}
+      {/* 5. OFFICIAL COMPANY EVENTS (Timeline & Register Cards)           */}
+      {/* ================================================================ */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🎯</span>
+            <h3 className="text-lg sm:text-xl font-black text-white uppercase tracking-tight f1-font">
+              OFFICIAL RACE EVENTS
+            </h3>
           </div>
+          <span className="text-xs font-mono text-slate-400">
+            Earn +25 Bonus PTS Per Event
+          </span>
         </div>
 
-      </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {eventsList.map((event) => {
+            const isCompleted = event.status === 'completed';
 
-      {/* Prize Structure Modal */}
-      {showPrizeModal && (
-        <PrizeStructureModal onClose={() => setShowPrizeModal(false)} />
-      )}
+            return (
+              <div 
+                key={event.id}
+                className="glass-panel glass-panel-hover rounded-3xl overflow-hidden border border-white/10 flex flex-col justify-between group shadow-lg"
+              >
+                <div className="relative h-36 overflow-hidden">
+                  <img
+                    src={event.imageUrl}
+                    alt={event.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+                  
+                  {/* Top Badges */}
+                  <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
+                    <span className="glass-panel text-white text-[10px] font-mono font-black px-2.5 py-1 rounded-full border border-white/20">
+                      {event.icon} {event.category}
+                    </span>
+                    <span className={`text-[10px] font-mono font-black px-2.5 py-1 rounded-full ${
+                      isCompleted ? 'bg-slate-700 text-slate-300' : 'bg-orange-500 text-black shadow-md'
+                    }`}>
+                      +{event.bonusPoints} PTS
+                    </span>
+                  </div>
+
+                  {/* Distance on Image */}
+                  <div className="absolute bottom-2 left-3 font-mono font-black text-lg text-white">
+                    {event.distanceKm} KM
+                  </div>
+                </div>
+
+                {/* Event Details */}
+                <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
+                  <div>
+                    <h4 className="font-bold text-white text-sm leading-snug line-clamp-1">
+                      {event.title}
+                    </h4>
+                    <div className="flex items-center gap-1.5 text-xs font-mono text-slate-400 mt-1">
+                      <Calendar className="w-3.5 h-3.5 text-orange-400" />
+                      <span>{event.date}</span>
+                      <span>•</span>
+                      <span>{event.time}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs font-mono text-slate-400 mt-0.5 truncate">
+                      <MapPin className="w-3.5 h-3.5 text-cyan-400" />
+                      <span className="truncate">{event.location}</span>
+                    </div>
+                  </div>
+
+                  {/* Registration Action */}
+                  <div className="pt-2 border-t border-white/10 flex items-center justify-between">
+                    <div className="text-[11px] font-mono text-slate-400">
+                      👥 <span className="text-white font-bold">{event.registeredCount}</span>/{event.capacity}
+                    </div>
+
+                    {isCompleted ? (
+                      <span className="text-[11px] font-mono text-emerald-400 font-bold flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Finished
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleToggleRegister(event.id)}
+                        className={`text-xs font-mono font-black px-3 py-1.5 rounded-xl cursor-pointer transition ${
+                          event.isRegistered
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                            : 'bg-[#FF5722] hover:bg-[#ff7043] text-black shadow-md'
+                        }`}
+                      >
+                        {event.isRegistered ? '✓ Registered' : 'Register'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ================================================================ */}
+      {/* 6. OFFICIAL BULLETINS & CARDS                                    */}
+      {/* ================================================================ */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">📢</span>
+            <h3 className="text-lg sm:text-xl font-black text-white uppercase tracking-tight f1-font">
+              OFFICIAL BULLETINS
+            </h3>
+          </div>
+          <button
+            onClick={() => handleNav('announcements')}
+            className="text-xs font-mono text-orange-400 hover:text-orange-300 font-bold cursor-pointer"
+          >
+            VIEW ALL
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {announcements.slice(0, 3).map((ann) => (
+            <div
+              key={ann.id}
+              className="glass-panel glass-panel-hover rounded-3xl p-5 border border-white/10 space-y-3 flex flex-col justify-between shadow-lg"
+            >
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className={`text-[10px] font-mono font-black px-2.5 py-0.5 rounded-lg ${
+                    ann.priority === 'urgent'
+                      ? 'bg-red-500/20 text-red-400 border border-red-500/40'
+                      : 'bg-orange-500/20 text-orange-400 border border-orange-500/40'
+                  }`}>
+                    {ann.category.toUpperCase()}
+                  </span>
+                  <span className="text-[11px] font-mono text-slate-400">{ann.date}</span>
+                </div>
+
+                <h4 className="font-bold text-white text-sm leading-snug line-clamp-2">
+                  {ann.title}
+                </h4>
+
+                <p className="text-xs text-slate-300 font-mono line-clamp-3 leading-relaxed">
+                  {ann.content}
+                </p>
+              </div>
+
+              <div className="pt-2 border-t border-white/10 flex items-center justify-between text-xs font-mono text-slate-400">
+                <span>By {ann.author}</span>
+                <span className="text-pink-400">❤️ {ann.likesCount}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ================================================================ */}
+      {/* 7. PRESTIGE PRIZE GALLERY (Visual Product Cards)                 */}
+      {/* ================================================================ */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🏆</span>
+            <h3 className="text-lg sm:text-xl font-black text-white uppercase tracking-tight f1-font">
+              PRIZE PODIUM TIERS
+            </h3>
+          </div>
+          <span className="text-xs font-mono text-amber-400 font-bold">
+            Equal Prizes for Men & Women
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+          {TOP_5_PRIZES.map((prize) => (
+            <div
+              key={prize.place}
+              className="glass-panel glass-panel-hover rounded-3xl p-4 sm:p-5 border border-white/10 text-center space-y-3 flex flex-col justify-between shadow-lg"
+            >
+              <div>
+                <div className="text-3xl sm:text-4xl select-none mb-1">{prize.trophyIcon}</div>
+                <span className={`text-[10px] font-mono font-black px-2.5 py-0.5 rounded-full ${prize.badgeBg}`}>
+                  TOP #{prize.place}
+                </span>
+                <div className="font-bold text-white text-sm mt-2">{prize.title}</div>
+                <div className="text-xs font-mono text-slate-300 mt-1 leading-snug">
+                  {prize.reward}
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-white/10 text-xs font-mono font-black text-amber-400">
+                {prize.cashEquivalent}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
     </div>
   );
