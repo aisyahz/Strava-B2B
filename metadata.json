@@ -1,6 +1,8 @@
 {
-  "name": "B2B Commerce Strava Challenge Portal 2026",
-  "description": "Internal competitive fitness portal for tracking employee rankings, monthly Strava challenge points, badges, telemetry stats, and awards.",
+  "name": "B2B Commerce Strava Grand Prix 2026",
+  "description": "Championship telemetry and leaderboard portal for B2B Commerce Strava Grand Prix 2026.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
